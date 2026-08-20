@@ -23,6 +23,10 @@ typedef struct
 {
     uint8_t buttonB;
     uint8_t buttonA;
+
+    int16_t joy2X;
+    int16_t joy2Y;
+    int16_t joy2Rot;
 } MEGA_t;
 //ここでArdinoMEGAに送るButtonのデータ構造体を
 
@@ -37,16 +41,25 @@ public:
     {
         init_serial(SERIAL_PATH_1);
         //↑ポートを指定して展開
-        joy_sub_ =
+        joy1_sub_ =
             this->create_subscription<
                 sensor_msgs::msg::Joy>(
                 "/controller/joy",
                 rclcpp::SensorDataQoS(),
                 std::bind(
-                    &SerialArduinoNode::joy_callback,
+                    &SerialArduinoNode::joy1_callback,
                     this,
                     std::placeholders::_1));
         //↑"/controller/joy"と指定したスマホコントローラの値の読み取り
+        joy2_sub_ =
+            this->create_subscription<
+                sensor_msgs::msg::Joy>(
+                "/cont2/joy",
+                rclcpp::SensorDataQoS(),
+                std::bind(
+                    &SerialArduinoNode::joy2_callback,
+                    this,
+                    std::placeholders::_1));
         timer_ =
             this->create_wall_timer(
                 std::chrono::milliseconds(20),
@@ -75,11 +88,13 @@ private:
     sb::Message<JoyData_t> joy_msg_;
     sb::Message<MEGA_t> mega_msg_;
 
-    bool controller_connected_ = false;
-    
+    bool controller1_connected_ = false;
+    bool controller2_connected_ = false;
 
     rclcpp::Subscription<
-        sensor_msgs::msg::Joy>::SharedPtr joy_sub_;
+        sensor_msgs::msg::Joy>::SharedPtr joy1_sub_;
+    rclcpp::Subscription<
+        sensor_msgs::msg::Joy>::SharedPtr joy2_sub_;
 
     rclcpp::TimerBase::SharedPtr timer_;
 
@@ -127,13 +142,13 @@ private:
     //--------------------------------------------------
 
   
-    void joy_callback(
+    void joy1_callback(
     const sensor_msgs::msg::Joy::SharedPtr msg)
 {
-       if (!controller_connected_)
+       if (!controller1_connected_)
     {
-        controller_connected_ = true;
-        RCLCPP_INFO(get_logger(), "Controller Connected!");
+        controller1_connected_ = true;
+        RCLCPP_INFO(get_logger(), "Controller1 Connected!");
     }
     
     if (msg->axes.size() < 4)
@@ -158,7 +173,34 @@ private:
 
    
 }
-//↑コントローラから読み取った値を変更、データ化
+//↑コントローラ1から読み取った値を変更、データ化
+    void joy2_callback(
+    const sensor_msgs::msg::Joy::SharedPtr msg)
+{
+       if (!controller2_connected_)
+    {
+        controller2_connected_ = true;
+        RCLCPP_INFO(get_logger(), "Controller2 Connected!");
+    }
+    
+    if (msg->axes.size() < 4)
+        return;
+    if (msg->buttons.size() < 2)
+        return;
+
+    mega_msg_.data.joy2X =
+    static_cast<int16_t>(-msg->axes[0] * 255);
+
+    mega_msg_.data.joy2Y =
+    static_cast<int16_t>(-msg->axes[1] * 255);
+
+    mega_msg_.data.joy2Rot =
+    static_cast<int16_t>(-msg->axes[2] * 255);
+
+
+
+   
+}
      void timer_callback()
     {
     bridge1_->write(0);
