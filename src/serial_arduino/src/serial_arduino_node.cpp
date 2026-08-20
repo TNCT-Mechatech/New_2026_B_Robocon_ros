@@ -8,6 +8,8 @@
 #include <chrono>
 #include <cstdint>
 
+#define SERIAL_PATH "/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.3:1.0"
+
 typedef struct
 {
     int16_t joyX;
@@ -26,7 +28,7 @@ public:
         : Node("serial_arduino")
           
     {
-        init_serial("/dev/ttyACM0");
+        init_serial(SERIAL_PATH);
 
         joy_sub_ =
             this->create_subscription<
