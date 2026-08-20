@@ -8,7 +8,8 @@
 #include <chrono>
 #include <cstdint>
 
-#define SERIAL_PATH "/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.3:1.0"//ポート左上足回りArduino指定　つける位置間違えないように
+#define SERIAL_PATH_1 "/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.3:1.0"//ポート左上足回りArduino指定　つける位置間違えないように
+#define SERIAL_PATH_2 "/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.4:1.0"//ポート左下Arduino指定　つける位置間違えないように
 
 typedef struct
 {
@@ -16,8 +17,14 @@ typedef struct
     int16_t joyY;
     int16_t joyRot;
 } JoyData_t;
-//ここでArdinoに送るJoyのデータ構造体を定義している。joyX, joyY, joyRotの3つのint16_t型の変数を持つ構造体で、ジョイスティックのX軸、Y軸、回転軸の値を格納するために使用される。
+//ここでArdinoLeonardoに送るJoyのデータ構造体を定義している。joyX, joyY, joyRotの3つのint16_t型の変数を持つ構造体で、ジョイスティックのX軸、Y軸、回転軸の値を格納するために使用される。
 
+typedef struct
+{
+    uint8_t buttonB;
+    uint8_t buttonA;
+} MEGA_t;
+//ここでArdinoMEGAに送るButtonのデータ構造体を
 
 
 class SerialArduinoNode : public rclcpp::Node
@@ -28,7 +35,7 @@ public:
         : Node("serial_arduino")
           
     {
-        init_serial(SERIAL_PATH);
+        init_serial(SERIAL_PATH_1);
         //↑ポートを指定して展開
         joy_sub_ =
             this->create_subscription<
@@ -50,16 +57,23 @@ public:
 
     ~SerialArduinoNode()
     {
-         delete bridge_;
-            delete serial_;
+            delete bridge1_;
+            delete serial1_;
+
+            delete bridge2_;
+            delete serial2_;
     }
 //↑シリアル通信の終了時に、シリアル通信オブジェクトとブリッジオブジェクトを削除してメモリを解放する。
 private:
 
-   LinuxHardwareSerial *serial_;
-    SerialBridge *bridge_;
-   
+   LinuxHardwareSerial *serial1_;
+   LinuxHardwareSerial *serial2_;
+
+    SerialBridge *bridge1_;
+    SerialBridge *bridge2_;
+
     sb::Message<JoyData_t> joy_msg_;
+    sb::Message<MEGA_t> mega_msg_;
 
     bool controller_connected_ = false;
     
@@ -76,18 +90,32 @@ private:
  
         bool init_serial(const std::string &port)
     {
-        serial_ = new LinuxHardwareSerial(
+        serial1_ = new LinuxHardwareSerial(
         port.c_str(),
         B230400
     );
-    //↑通信速度設定
+    //↑Leonardo通信速度設定
 
-    bridge_ = new SerialBridge(serial_);
-    bridge_->add_frame(0, &joy_msg_);
+    bridge1_ = new SerialBridge(serial1_);
+    bridge1_->add_frame(0, &joy_msg_);
 
     RCLCPP_INFO(
         get_logger(),
-        "SerialBridge Connected"
+        "SerialBridge Connected: Leonardo"
+    );
+
+    serial2_ = new LinuxHardwareSerial(
+        SERIAL_PATH_2,
+        B230400
+    );
+    //↑MEGA通信速度設定
+
+    bridge2_ = new SerialBridge(serial2_);
+    bridge2_->add_frame(0, &mega_msg_);
+
+    RCLCPP_INFO(
+        get_logger(),
+        "SerialBridge Connected: MEGA"
     );
 
     return true;
@@ -110,6 +138,8 @@ private:
     
     if (msg->axes.size() < 4)
         return;
+    if (msg->buttons.size() < 2)
+        return;
 
     joy_msg_.data.joyX =
     static_cast<int16_t>(-msg->axes[0] * 255);
@@ -120,12 +150,21 @@ private:
     joy_msg_.data.joyRot =
     static_cast<int16_t>(-msg->axes[2] * 255);
 
+    mega_msg_.data.buttonA =
+    static_cast<uint8_t>(msg->buttons[0]);
+
+    mega_msg_.data.buttonB = 
+    static_cast<uint8_t>(msg->buttons[1]);
+
+   
 }
 //↑コントローラから読み取った値を変更、データ化
      void timer_callback()
     {
-    bridge_->write(0);
-     bridge_->update();
+    bridge1_->write(0);
+     bridge1_->update();
+    bridge2_->write(0);
+     bridge2_->update();
     }
     //↑実際に送信
 
