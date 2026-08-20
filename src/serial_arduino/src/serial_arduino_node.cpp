@@ -8,7 +8,7 @@
 #include <chrono>
 #include <cstdint>
 
-#define SERIAL_PATH "/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.3:1.0"
+#define SERIAL_PATH "/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.3:1.0"//ポート左上足回りArduino指定　つける位置間違えないように
 
 typedef struct
 {
@@ -16,7 +16,7 @@ typedef struct
     int16_t joyY;
     int16_t joyRot;
 } JoyData_t;
-
+//ここでArdinoに送るJoyのデータ構造体を定義している。joyX, joyY, joyRotの3つのint16_t型の変数を持つ構造体で、ジョイスティックのX軸、Y軸、回転軸の値を格納するために使用される。
 
 
 
@@ -29,7 +29,7 @@ public:
           
     {
         init_serial(SERIAL_PATH);
-
+        //↑ポートを指定して展開
         joy_sub_ =
             this->create_subscription<
                 sensor_msgs::msg::Joy>(
@@ -39,21 +39,21 @@ public:
                     &SerialArduinoNode::joy_callback,
                     this,
                     std::placeholders::_1));
-
+        //↑"/controller/joy"と指定したスマホコントローラの値の読み取り
         timer_ =
             this->create_wall_timer(
                 std::chrono::milliseconds(20),
                 std::bind(
                     &SerialArduinoNode::timer_callback,
                     this));
-    }
+    }   //↑20msごとにtimer_callback()を呼び出すタイマーを作成する。これにより、定期的にシリアル通信を行うことができる。
 
     ~SerialArduinoNode()
     {
          delete bridge_;
             delete serial_;
     }
-
+//↑シリアル通信の終了時に、シリアル通信オブジェクトとブリッジオブジェクトを削除してメモリを解放する。
 private:
 
    LinuxHardwareSerial *serial_;
@@ -80,6 +80,7 @@ private:
         port.c_str(),
         B230400
     );
+    //↑通信速度設定
 
     bridge_ = new SerialBridge(serial_);
     bridge_->add_frame(0, &joy_msg_);
@@ -120,14 +121,13 @@ private:
     static_cast<int16_t>(-msg->axes[2] * 255);
 
 }
+//↑コントローラから読み取った値を変更、データ化
      void timer_callback()
     {
     bridge_->write(0);
      bridge_->update();
     }
-    //--------------------------------------------------
-    // 6Byte送信
-    //--------------------------------------------------
+    //↑実際に送信
 
    
 };
