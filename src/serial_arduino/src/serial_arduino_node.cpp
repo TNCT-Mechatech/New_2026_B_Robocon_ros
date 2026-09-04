@@ -11,6 +11,7 @@
 #define SERIAL_PATH_1 "/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.3:1.0" // ポート左上 足回りArduino指定
 #define SERIAL_PATH_2 "/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.4:1.0" // ポート左下 Arduino指定
 
+
 //============================================================
 // Leonardoに送るJoyデータ
 //============================================================
@@ -25,7 +26,7 @@ typedef struct
 
 
 //============================================================
-// MEGAに送るボタンデータ
+// MEGAへ送るボタンデータ
 //============================================================
 
 typedef struct
@@ -35,6 +36,19 @@ typedef struct
     uint8_t buttonX;
 
 } MEGA_t;
+
+
+//============================================================
+// MEGAから返ってくるデータ
+//============================================================
+
+typedef struct
+{
+    uint8_t buttonB;
+    uint8_t buttonA;
+    uint8_t buttonX;
+
+} MEGA_Response_t;
 
 
 //============================================================
@@ -95,6 +109,19 @@ public:
                 std::bind(
                     &SerialArduinoNode::timer_callback,
                     this));
+
+
+        //====================================================
+        // 3秒待機用
+        //====================================================
+
+        start_time_ =
+            std::chrono::steady_clock::now();
+
+
+        RCLCPP_INFO(
+            get_logger(),
+            "Waiting 3 seconds before TX...");
     }
 
 
@@ -118,11 +145,11 @@ private:
     // Serial
     //========================================================
 
-    LinuxHardwareSerial *serial1_;
-    LinuxHardwareSerial *serial2_;
+    LinuxHardwareSerial *serial1_ = nullptr;
+    LinuxHardwareSerial *serial2_ = nullptr;
 
-    SerialBridge *bridge1_;
-    SerialBridge *bridge2_;
+    SerialBridge *bridge1_ = nullptr;
+    SerialBridge *bridge2_ = nullptr;
 
 
     //========================================================
@@ -132,6 +159,8 @@ private:
     sb::Message<JoyData_t> joy_msg_;
 
     sb::Message<MEGA_t> mega_msg_;
+
+    sb::Message<MEGA_Response_t> mega_response_msg_;
 
 
     //========================================================
@@ -153,6 +182,13 @@ private:
         sensor_msgs::msg::Joy>::SharedPtr joy2_sub_;
 
     rclcpp::TimerBase::SharedPtr timer_;
+
+
+    //========================================================
+    // 3秒待機用
+    //========================================================
+
+    std::chrono::steady_clock::time_point start_time_;
 
 
     //========================================================
@@ -195,9 +231,17 @@ private:
         bridge2_ =
             new SerialBridge(serial2_);
 
+
+        // Pi → Mega
         bridge2_->add_frame(
             0,
             &mega_msg_);
+
+
+        // Mega → Pi
+        bridge2_->add_frame(
+            1,
+            &mega_response_msg_);
 
 
         RCLCPP_INFO(
@@ -297,60 +341,129 @@ private:
     // Timer
     //========================================================
 
-    void timer_callback()
+    //========================================================
+// Timer
+//========================================================
+
+void timer_callback()
+{
+    //====================================================
+    // 起動後3秒待つ
+    //====================================================
+
+    auto now =
+        std::chrono::steady_clock::now();
+
+    auto elapsed =
+        std::chrono::duration_cast<
+            std::chrono::seconds>(
+            now - start_time_).count();
+
+    if (elapsed < 3)
+        return;
+
+
+    //====================================================
+    // MEGAから前回の返信を受信
+    //====================================================
+
+    bridge2_->update();
+
+
+    //====================================================
+    // MEGA RX更新を記録
+    //====================================================
+
+    static bool mega_rx_received = false;
+
+    if (mega_response_msg_.was_updated())
     {
-        //====================================================
-        // Leonardoへ送信
-        //====================================================
-
-        bridge1_->write(0);
-
-
-        //====================================================
-        // MEGAへ送信
-        //====================================================
-
-        int tx =
-            bridge2_->write(0);
-
-
-        //====================================================
-        // 5秒ごとに状態表示
-        //====================================================
-
-        static auto last_status_print =
-            std::chrono::steady_clock::now();
-
-        auto now =
-            std::chrono::steady_clock::now();
-
-        if (
-            std::chrono::duration_cast<
-                std::chrono::seconds>(
-                now - last_status_print).count() >= 5)
-        {
-            last_status_print = now;
-
-            RCLCPP_INFO(
-                get_logger(),
-                "MEGA TX=%d | A=%d B=%d X=%d",
-                tx,
-                mega_msg_.data.buttonA,
-                mega_msg_.data.buttonB,
-                mega_msg_.data.buttonX);
-
-
-            RCLCPP_INFO(
-                get_logger(),
-                "Controller1: %s, Controller2: %s",
-                controller1_connected_
-                    ? "Connected"
-                    : "Disconnected",
-                controller2_connected_
-                    ? "Connected"
-                    : "Disconnected");
-        }
+        mega_rx_received = true;
     }
+
+
+    //====================================================
+    // Leonardoへ送信
+    //====================================================
+
+    bridge1_->write(0);
+
+
+    //====================================================
+    // MEGAへ送信
+    //====================================================
+
+    int tx =
+        bridge2_->write(0);
+
+
+    //====================================================
+    // 5秒ごとに状態表示
+    //====================================================
+
+    static auto last_status_print =
+        std::chrono::steady_clock::now();
+
+    if (
+        std::chrono::duration_cast<
+            std::chrono::seconds>(
+            now - last_status_print).count() >= 5)
+    {
+        last_status_print = now;
+
+
+        //================================================
+        // MEGA通信状態
+        //================================================
+
+        if (mega_rx_received)
+        {
+            RCLCPP_INFO(
+                get_logger(),
+                "MEGA RX OK | A=%d B=%d X=%d",
+                mega_response_msg_.data.buttonA,
+                mega_response_msg_.data.buttonB,
+                mega_response_msg_.data.buttonX);
+        }
+        else
+        {
+            RCLCPP_WARN(
+                get_logger(),
+                "MEGA RX ERROR | No response");
+        }
+
+        // 次の5秒間を新しく判定
+        mega_rx_received = false;
+
+
+        //================================================
+        // MEGA TX
+        //================================================
+
+        RCLCPP_INFO(
+            get_logger(),
+            "MEGA TX=%d | A=%d B=%d X=%d",
+            tx,
+            mega_msg_.data.buttonA,
+            mega_msg_.data.buttonB,
+            mega_msg_.data.buttonX);
+
+
+        //================================================
+        // Controller状態
+        //================================================
+
+        RCLCPP_INFO(
+            get_logger(),
+            "Controller1: %s, Controller2: %s",
+            controller1_connected_
+                ? "Connected"
+                : "Disconnected",
+            controller2_connected_
+                ? "Connected"
+                : "Disconnected");
+    }
+}
 };
 
 
