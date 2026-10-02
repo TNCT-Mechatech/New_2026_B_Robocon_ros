@@ -66,6 +66,7 @@ typedef struct
 
     uint8_t buttonCollectROT;
     uint8_t buttonCollectHand;
+    uint8_t buttonCollectBack;
 
     uint8_t buttonCamUP;
     uint8_t buttonCamDOWN;
@@ -75,6 +76,7 @@ typedef struct
 
     uint8_t buttonLookUp;
     uint8_t buttonLookDown;
+
 
 } MEGA_t;
 
@@ -490,6 +492,10 @@ private:
         mega_msg_.data.buttonCollectHand =
             static_cast<uint8_t>(
                 msg->buttons[7]);
+                
+        mega_msg_.data.buttonCollectBack =
+            static_cast<uint8_t>(
+                msg->buttons[4]);
     }
 
 
