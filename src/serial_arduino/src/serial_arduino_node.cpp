@@ -14,13 +14,12 @@
 // シリアルポート
 //==================================================
 
-#define SERIAL_PATH_1 \
-    "/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.3:1.0"
+#define SERIAL_PATH_1 "/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.3:1.0"
+//"/dev/ttyACM0"
 
-#define SERIAL_PATH_2 \
-    "/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.4:1.0"
-
-
+#define SERIAL_PATH_2 "/dev/serial/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.4:1.0"
+//"/dev/ttyACM1"
+    
 //==================================================
 // ジョイスティック最大値
 //==================================================
@@ -33,13 +32,14 @@
 // Raspberry Pi → Leonardo
 //==================================================
 
-typedef struct
+typedef struct __attribute__((packed))
 {
     int16_t joyX;
     int16_t joyY;
     int16_t joyRot;
 
     uint8_t buttonGear;
+    uint8_t buttonGearBack;
     uint8_t buttonSol;
 
 } JoyData_t;
@@ -543,6 +543,10 @@ private:
         joy1_data_.buttonGear =
             static_cast<uint8_t>(
                 msg->buttons[0]);
+        
+        joy1_data_.buttonGearBack = 
+            static_cast<uint8_t>(
+                msg->buttons[3]);
 
         joy1_data_.buttonSol =
             static_cast<uint8_t>(
@@ -723,23 +727,32 @@ private:
 
         debug_count++;
 
+
         if (debug_count >= 50)
         {
             RCLCPP_INFO(
             get_logger(),
-            "MEGA TX: A=%d B=%d X=%d ROT=%d HAND=%d CAMUP=%d CAMDOWN=%d ROLL=%d BACK=%d LOOKUP=%d LOOKDOWN=%d",
+            "MEGA TX: A=%d B=%d X=%d ROT=%d HAND=%d  BACK=%d CAMUP=%d CAMDOWN=%d ROLL=%d LOOKUP=%d LOOKDOWN=%d",
         
             mega_msg_.data.buttonA,
             mega_msg_.data.buttonB,
             mega_msg_.data.buttonX,
+
             mega_msg_.data.buttonCollectROT,
             mega_msg_.data.buttonCollectHand,
+            mega_msg_.data.buttonCollectBack,
+
             mega_msg_.data.buttonCamUP,
             mega_msg_.data.buttonCamDOWN,
             mega_msg_.data.buttonRollGo,
             mega_msg_.data.buttonRollBack,
             mega_msg_.data.buttonLookUp,
             mega_msg_.data.buttonLookDown
+            );
+            RCLCPP_INFO(
+            get_logger(),
+            "sizeof(JoyData_t) = %zu",
+            sizeof(JoyData_t)
             );
 
             debug_count = 0;
